@@ -33,12 +33,12 @@ var currentBaseLayer = osmOrgTilesLayer;
 
 // layer control
 var baseLayers = {'OSM Carto': osmOrgTilesLayer};
-var overlays = {'OpenRailwayMap Infrastruktur': ORMTilesLayer, 'Störungen': markers, 'behobene Störungen': oldMarkers, 'Regionalmeldungen': regionMarkers};
+var overlays = {'OpenRailwayMap Infrastructure': ORMTilesLayer, 'Interruptions': markers, 'Previous Interruptions': oldMarkers, 'Region-wide Messages': regionMarkers};
 var overlaysMeta = {
-    'OpenRailwayMap Infrastruktur': 'orm_infrastructure',
-    'Störungen': 'markers',
-    'behobene Störungen': 'oldMarkers',
-    'Regionalmeldungen': 'regionMarkers'
+    'OpenRailwayMap Infrastructure': 'orm_infrastructure',
+    'Interruptions': 'markers',
+    'Previous Interruptions': 'oldMarkers',
+    'Region-wide Messages': 'regionMarkers'
 };
 
 var activeLayers = [];
@@ -132,12 +132,12 @@ layerControl.addTo(mymap);
 function updateAttribution() {
     attributionControl.remove();
     attributionControl = L.control.attribution();
-    attributionControl.addAttribution('Basiskarte © <a href="//www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (<a href="https://opendatacommons.org/licenses/odbl/index.html">ODbL</a>), Kartengrafik <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>')
-    if (activeLayers.indexOf('OpenRailwayMap Infrastruktur')  != -1) {
-        attributionControl.addAttribution('Streckennetz: CC-BY-SA <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> und <a href="http://www.openrailwaymap.org">OpenRailwayMap</a>');
+    attributionControl.addAttribution('Basic Map © <a href="//www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (<a href="https://opendatacommons.org/licenses/odbl/index.html">ODbL</a>), Map Graphics <a href="http://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>')
+    if (activeLayers.indexOf('OpenRailwayMap Infrastructure')  != -1) {
+        attributionControl.addAttribution('Network Map: CC-BY-SA <a href="http://openstreetmap.org/copyright">OpenStreetMap</a> and <a href="http://www.openrailwaymap.org">OpenRailwayMap</a>');
     }
-    if (activeLayers.indexOf('Störungen') != -1 || activeLayers.indexOf('behobene Störungen') != -1 || activeLayers.indexOf('Störungen') != -1) {
-        attributionControl.addAttribution('Störungen: DB Netz');
+    if (activeLayers.indexOf('Interruptions') != -1 || activeLayers.indexOf('Previous Interruptions') != -1 || activeLayers.indexOf('Interruptions') != -1) {
+        attributionControl.addAttribution('Interruptions: DB Netz');
     }
     attributionControl.addTo(mymap);
 }
@@ -182,7 +182,7 @@ function setPopupStateClosed() {
 
 function showTrainsForHandler(ev) {
     var xhr = new XMLHttpRequest();
-    var url = "/bin/mgate.exe";
+    var url = "https://uts.azure-api.net/strecken-info-proxy/mgate";
     xhr.open("POST", url, true);
     xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
     xhr.responseType = "json";
@@ -197,7 +197,7 @@ function showTrainsForHandler(ev) {
                 var parts = e['jid'].split('#');
                 trainList.push(escapeHTML(parts[30] + ' (' + parts[26] + ' ' + parts[28] + ')'));
             });
-            newElement.innerHTML = 'Betroffene Züge:<br>' + trainList.join('<br>');
+            newElement.innerHTML = 'Affected Trains:<br>' + trainList.join('<br>');
             oldElement.parentNode.replaceChild(newElement, oldElement);
         }
     }
@@ -229,7 +229,7 @@ function addMarker(markerLat, markerLon, message, spatialContext, endOfEvent, lo
 	markerIcon = new RegionMessageIcon({iconUrl: 'images/region-grey.svg'});
     }
     var marker = L.marker([markerLat, markerLon], {icon: markerIcon});
-    marker.bindPopup('<div class="disruption-popup-content">' + escapeHTML(spatialContext) + '<br>' + message + '</div><a class="show-trains" href="#" data-himid="' + himId + '">Betroffene Züge anzeigen</a>');
+    marker.bindPopup('<div class="disruption-popup-content">' + escapeHTML(spatialContext) + '<br>' + message + '</div><a class="show-trains" href="#" data-himid="' + himId + '">Show affected trains</a>');
     marker.on('popupopen', function(){setPopupStateOpen(); registerShowTrains();});
     marker.on('popupclose', setPopupStateClosed);
     if (localEvent && historic) {
@@ -267,7 +267,6 @@ function closeMessageOfTheDay() {
         return new L.Control.InfoIcon(opts);
     }
     L.control.InfoIcon({ position: 'topright' }).addTo(mymap);
-    console.log('added topright');
 }
 
 function showMessageOfTheDay() {
@@ -330,15 +329,14 @@ function displayMarkers(responseFromServer) {
         for (var i = 0; i < element.eventRefL.length; i++) {
             var thisEvent = allEvents[element.eventRefL[i]];
             lastEndOfEvent = moment.tz(thisEvent.tDate + thisEvent.tTime, 'YYYYMMDDHHmmss', 'Europe/Berlin');
-            var durationString = formatHimDate(thisEvent.fDate, thisEvent.fTime) + ' bis vsl. ' + formatHimDate(thisEvent.tDate, thisEvent.tTime);
+            var durationString = formatHimDate(thisEvent.fDate, thisEvent.fTime) + ' to approx. ' + formatHimDate(thisEvent.tDate, thisEvent.tTime);
             if (lastDurationString != durationString) {
                 message = message + '<br>' + durationString;
                 lastDurationString = durationString;
             }
         }
-        if (element.hasOwnProperty('pubChL')) {
-            var pubChL = element.pubChL[0];
-            message = message + '<br>zuletzt aktualisiert: ' + formatHimDate(pubChL.fDate, pubChL.fTime);
+        if (element.hasOwnProperty('lModDate')) {
+            message = message + '<br>last update: ' + formatHimDate(element.lModDate, element.lModTime);
         }
         if (element.hasOwnProperty('text')) {
             message = message + '<br>' + findAndMakeLinks(element.text);
@@ -415,7 +413,7 @@ function getDisruptionData() {
     }
     showLoading(true);
     var xhr = new XMLHttpRequest();
-    var url = "/bin/mgate.exe";
+    var url = "https://uts.azure-api.net/strecken-info-proxy/mgate";
     xhr.open("POST", url, true);
     xhr.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
     xhr.responseType = "json";
